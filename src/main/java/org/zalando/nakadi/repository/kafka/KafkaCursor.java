@@ -1,6 +1,6 @@
 package org.zalando.nakadi.repository.kafka;
 
-import org.zalando.nakadi.domain.Cursor;
+import org.zalando.nakadi.view.Cursor;
 
 import javax.annotation.concurrent.Immutable;
 

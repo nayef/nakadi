@@ -2,6 +2,13 @@ package org.zalando.nakadi.repository.kafka;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Future;
+import java.util.function.Function;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.GetChildrenBuilder;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -20,10 +27,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.zalando.nakadi.config.NakadiSettings;
 import org.zalando.nakadi.domain.BatchItem;
-import org.zalando.nakadi.domain.Cursor;
 import org.zalando.nakadi.domain.CursorError;
 import org.zalando.nakadi.domain.EventPublishingStatus;
-import org.zalando.nakadi.domain.EventTypeStatistics;
 import org.zalando.nakadi.domain.Topic;
 import org.zalando.nakadi.domain.TopicPartition;
 import org.zalando.nakadi.exceptions.EventPublishingException;
@@ -31,15 +36,8 @@ import org.zalando.nakadi.exceptions.InvalidCursorException;
 import org.zalando.nakadi.exceptions.NakadiException;
 import org.zalando.nakadi.repository.zookeeper.ZooKeeperHolder;
 import org.zalando.nakadi.repository.zookeeper.ZookeeperSettings;
-
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.Future;
-import java.util.function.Function;
-
+import org.zalando.nakadi.util.UUIDGenerator;
+import org.zalando.nakadi.view.Cursor;
 import static java.lang.String.valueOf;
 import static java.util.Arrays.asList;
 import static java.util.stream.Collectors.toList;
@@ -320,17 +318,6 @@ public class KafkaTopicRepositoryTest {
     }
 
     @Test
-    public void testIntegerOverflowOnStatisticsCalculation() throws NakadiException {
-        when(nakadiSettings.getMaxTopicPartitionCount()).thenReturn(1000);
-        final EventTypeStatistics statistics = new EventTypeStatistics();
-        statistics.setReadParallelism(1);
-        statistics.setWriteParallelism(1);
-        statistics.setMessagesPerMinute(1000000000);
-        statistics.setMessageSize(1000000000);
-        assertThat(kafkaTopicRepository.calculateKafkaPartitionCount(statistics), equalTo(6));
-    }
-
-    @Test
     @SuppressWarnings("unchecked")
     public void canCreateEventConsumerWithOffsetsTransformed() throws Exception {
         // ACT /
@@ -429,7 +416,7 @@ public class KafkaTopicRepositoryTest {
                     nakadiSettings,
                     kafkaSettings,
                     zookeeperSettings,
-                    KafkaPartitionsCalculatorTest.buildTest());
+                    new UUIDGenerator());
         } catch (final Exception e) {
             throw new RuntimeException(e);
         }

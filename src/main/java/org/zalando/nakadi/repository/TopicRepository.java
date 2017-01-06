@@ -1,8 +1,9 @@
 package org.zalando.nakadi.repository;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.zalando.nakadi.domain.BatchItem;
-import org.zalando.nakadi.domain.Cursor;
-import org.zalando.nakadi.domain.EventType;
 import org.zalando.nakadi.domain.SubscriptionBase;
 import org.zalando.nakadi.domain.Topic;
 import org.zalando.nakadi.domain.TopicPartition;
@@ -14,10 +15,7 @@ import org.zalando.nakadi.exceptions.NakadiException;
 import org.zalando.nakadi.exceptions.ServiceUnavailableException;
 import org.zalando.nakadi.exceptions.TopicCreationException;
 import org.zalando.nakadi.exceptions.TopicDeletionException;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import org.zalando.nakadi.view.Cursor;
 
 /**
  * Manages access to topic information.
@@ -28,7 +26,8 @@ public interface TopicRepository {
 
     List<Topic> listTopics() throws NakadiException;
 
-    void createTopic(EventType eventType) throws TopicCreationException, DuplicatedEventTypeNameException;
+    String createTopic(int partitionCount, Long retentionTimeMs)
+            throws TopicCreationException, DuplicatedEventTypeNameException;
 
     void deleteTopic(String topic) throws TopicDeletionException;
 

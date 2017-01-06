@@ -2,7 +2,7 @@ package org.zalando.nakadi.repository.kafka;
 
 import com.google.common.collect.Lists;
 import org.zalando.nakadi.domain.ConsumedEvent;
-import org.zalando.nakadi.domain.Cursor;
+import org.zalando.nakadi.view.Cursor;
 import org.zalando.nakadi.repository.EventConsumer;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;

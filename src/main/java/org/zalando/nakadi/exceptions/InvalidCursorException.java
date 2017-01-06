@@ -1,6 +1,6 @@
 package org.zalando.nakadi.exceptions;
 
-import org.zalando.nakadi.domain.Cursor;
+import org.zalando.nakadi.view.Cursor;
 import org.zalando.nakadi.domain.CursorError;
 
 public class InvalidCursorException extends Exception {

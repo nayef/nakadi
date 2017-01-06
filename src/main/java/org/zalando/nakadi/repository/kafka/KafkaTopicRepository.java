@@ -1,9 +1,24 @@
 package org.zalando.nakadi.repository.kafka;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import javax.annotation.Nullable;
 import kafka.admin.AdminUtils;
 import kafka.common.TopicExistsException;
 import kafka.utils.ZkUtils;
@@ -22,15 +37,11 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.zalando.nakadi.config.NakadiSettings;
 import org.zalando.nakadi.domain.BatchItem;
-import org.zalando.nakadi.domain.Cursor;
 import org.zalando.nakadi.domain.EventPublishingStatus;
 import org.zalando.nakadi.domain.EventPublishingStep;
-import org.zalando.nakadi.domain.EventType;
-import org.zalando.nakadi.domain.EventTypeStatistics;
 import org.zalando.nakadi.domain.SubscriptionBase;
 import org.zalando.nakadi.domain.Topic;
 import org.zalando.nakadi.domain.TopicPartition;
-import org.zalando.nakadi.exceptions.DuplicatedEventTypeNameException;
 import org.zalando.nakadi.exceptions.EventPublishingException;
 import org.zalando.nakadi.exceptions.InvalidCursorException;
 import org.zalando.nakadi.exceptions.NakadiException;
@@ -41,24 +52,8 @@ import org.zalando.nakadi.repository.EventConsumer;
 import org.zalando.nakadi.repository.TopicRepository;
 import org.zalando.nakadi.repository.zookeeper.ZooKeeperHolder;
 import org.zalando.nakadi.repository.zookeeper.ZookeeperSettings;
-
-import javax.annotation.Nullable;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
+import org.zalando.nakadi.util.UUIDGenerator;
+import org.zalando.nakadi.view.Cursor;
 import static java.util.Collections.unmodifiableList;
 import static java.util.stream.Collectors.toList;
 import static org.zalando.nakadi.domain.CursorError.EMPTY_PARTITION;
@@ -85,8 +80,8 @@ public class KafkaTopicRepository implements TopicRepository {
     private final NakadiSettings nakadiSettings;
     private final KafkaSettings kafkaSettings;
     private final ZookeeperSettings zookeeperSettings;
-    private final KafkaPartitionsCalculator partitionsCalculator;
     private final ConcurrentMap<String, HystrixKafkaCircuitBreaker> circuitBreakers;
+    private final UUIDGenerator uuidGenerator;
 
     @Autowired
     public KafkaTopicRepository(final ZooKeeperHolder zkFactory,
@@ -94,13 +89,13 @@ public class KafkaTopicRepository implements TopicRepository {
                                 final NakadiSettings nakadiSettings,
                                 final KafkaSettings kafkaSettings,
                                 final ZookeeperSettings zookeeperSettings,
-                                final KafkaPartitionsCalculator partitionsCalculator) {
+                                final UUIDGenerator uuidGenerator) {
         this.zkFactory = zkFactory;
         this.kafkaFactory = kafkaFactory;
         this.nakadiSettings = nakadiSettings;
         this.kafkaSettings = kafkaSettings;
         this.zookeeperSettings = zookeeperSettings;
-        this.partitionsCalculator = partitionsCalculator;
+        this.uuidGenerator = uuidGenerator;
         this.circuitBreakers = new ConcurrentHashMap<>();
     }
 
@@ -119,20 +114,24 @@ public class KafkaTopicRepository implements TopicRepository {
     }
 
     @Override
-    public void createTopic(final EventType eventType) throws TopicCreationException, DuplicatedEventTypeNameException {
-        if (eventType.getOptions().getRetentionTime() == null) {
+    public String createTopic(final int partitionCount, final Long retentionTimeMs)
+            throws TopicCreationException {
+        if (retentionTimeMs == null) {
             throw new IllegalArgumentException("Retention time can not be null");
         }
-        createTopic(eventType.getTopic(),
-                calculateKafkaPartitionCount(eventType.getDefaultStatistic()),
+        final String topicName = uuidGenerator.randomUUID().toString();
+        createTopic(topicName,
+                partitionCount,
                 nakadiSettings.getDefaultTopicReplicaFactor(),
-                eventType.getOptions().getRetentionTime(),
+                retentionTimeMs,
                 nakadiSettings.getDefaultTopicRotationMs());
+        // calculateKafkaPartitionCount(eventType.getDefaultStatistic())
+        return topicName;
     }
 
     private void createTopic(final String topic, final int partitionsNum, final int replicaFactor,
                              final long retentionMs, final long rotationMs)
-            throws TopicCreationException, DuplicatedEventTypeNameException {
+            throws TopicCreationException {
         try {
             doWithZkUtils(zkUtils -> {
                 final Properties topicConfig = new Properties();
@@ -141,8 +140,8 @@ public class KafkaTopicRepository implements TopicRepository {
                 AdminUtils.createTopic(zkUtils, topic, partitionsNum, replicaFactor, topicConfig);
             });
         } catch (final TopicExistsException e) {
-            throw new DuplicatedEventTypeNameException("EventType with name " + topic +
-                    " already exists (or wasn't completely removed yet)");
+            throw new TopicCreationException("Topic with name " + topic +
+                    " already exists (or wasn't completely removed yet)", e);
         } catch (final Exception e) {
             throw new TopicCreationException("Unable to create topic " + topic, e);
         }
@@ -233,8 +232,8 @@ public class KafkaTopicRepository implements TopicRepository {
     public void syncPostBatch(final String topicId, final List<BatchItem> batch) throws EventPublishingException {
         final Producer<String, String> producer = kafkaFactory.takeProducer();
         try {
-            final Map<String, String> partitionToBroker = producer.partitionsFor(topicId).stream()
-                    .collect(Collectors.toMap(p -> String.valueOf(p.partition()),p -> String.valueOf(p.leader().id())));
+            final Map<String, String> partitionToBroker = producer.partitionsFor(topicId).stream().collect(
+                    Collectors.toMap(p -> String.valueOf(p.partition()), p -> String.valueOf(p.leader().id())));
             batch.forEach(item -> {
                 Preconditions.checkNotNull(
                         item.getPartition(), "BatchItem partition can't be null at the moment of publishing!");
@@ -559,25 +558,5 @@ public class KafkaTopicRepository implements TopicRepository {
                 zkUtils.close();
             }
         }
-    }
-
-    @VisibleForTesting
-    Integer calculateKafkaPartitionCount(final EventTypeStatistics stat) {
-        if (null == stat) {
-            return nakadiSettings.getDefaultTopicPartitionCount();
-        }
-        final int maxPartitionsDueParallelism = Math.max(stat.getReadParallelism(), stat.getWriteParallelism());
-        if (maxPartitionsDueParallelism >= nakadiSettings.getMaxTopicPartitionCount()) {
-            return nakadiSettings.getMaxTopicPartitionCount();
-        }
-        return Math.min(nakadiSettings.getMaxTopicPartitionCount(), Math.max(
-                maxPartitionsDueParallelism,
-                calculatePartitionsAccordingLoad(stat.getMessagesPerMinute(), stat.getMessageSize())));
-    }
-
-    private int calculatePartitionsAccordingLoad(final int messagesPerMinute, final int avgEventSizeBytes) {
-        final float throughoutputMbPerSec = ((float) messagesPerMinute * (float) avgEventSizeBytes)
-                / (1024.f * 1024.f * 60.f);
-        return partitionsCalculator.getBestPartitionsCount(avgEventSizeBytes, throughoutputMbPerSec);
     }
 }
