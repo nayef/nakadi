@@ -40,7 +40,6 @@ import org.zalando.nakadi.domain.BatchItem;
 import org.zalando.nakadi.domain.EventPublishingStatus;
 import org.zalando.nakadi.domain.EventPublishingStep;
 import org.zalando.nakadi.domain.SubscriptionBase;
-import org.zalando.nakadi.domain.Topic;
 import org.zalando.nakadi.domain.TopicPartition;
 import org.zalando.nakadi.exceptions.EventPublishingException;
 import org.zalando.nakadi.exceptions.InvalidCursorException;
@@ -99,15 +98,11 @@ public class KafkaTopicRepository implements TopicRepository {
         this.circuitBreakers = new ConcurrentHashMap<>();
     }
 
-    @Override
-    public List<Topic> listTopics() throws ServiceUnavailableException {
+    public List<String> listTopics() throws ServiceUnavailableException {
         try {
             return zkFactory.get()
                     .getChildren()
-                    .forPath("/brokers/topics")
-                    .stream()
-                    .map(Topic::new)
-                    .collect(toList());
+                    .forPath("/brokers/topics");
         } catch (final Exception e) {
             throw new ServiceUnavailableException("Failed to list topics", e);
         }
@@ -161,7 +156,6 @@ public class KafkaTopicRepository implements TopicRepository {
     public boolean topicExists(final String topic) throws ServiceUnavailableException {
         return listTopics()
                 .stream()
-                .map(Topic::getName)
                 .anyMatch(t -> t.equals(topic));
     }
 

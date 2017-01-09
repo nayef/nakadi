@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.Set;
 import org.zalando.nakadi.domain.BatchItem;
 import org.zalando.nakadi.domain.SubscriptionBase;
-import org.zalando.nakadi.domain.Topic;
 import org.zalando.nakadi.domain.TopicPartition;
 import org.zalando.nakadi.exceptions.DuplicatedEventTypeNameException;
 import org.zalando.nakadi.exceptions.EventPublishingException;
@@ -23,8 +22,6 @@ import org.zalando.nakadi.view.Cursor;
  * @author john
  */
 public interface TopicRepository {
-
-    List<Topic> listTopics() throws NakadiException;
 
     String createTopic(int partitionCount, Long retentionTimeMs)
             throws TopicCreationException, DuplicatedEventTypeNameException;

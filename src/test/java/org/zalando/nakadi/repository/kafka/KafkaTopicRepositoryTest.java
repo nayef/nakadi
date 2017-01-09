@@ -29,7 +29,6 @@ import org.zalando.nakadi.config.NakadiSettings;
 import org.zalando.nakadi.domain.BatchItem;
 import org.zalando.nakadi.domain.CursorError;
 import org.zalando.nakadi.domain.EventPublishingStatus;
-import org.zalando.nakadi.domain.Topic;
 import org.zalando.nakadi.domain.TopicPartition;
 import org.zalando.nakadi.exceptions.EventPublishingException;
 import org.zalando.nakadi.exceptions.InvalidCursorException;
@@ -126,7 +125,7 @@ public class KafkaTopicRepositoryTest {
 
     @Test
     public void canListAllTopics() throws Exception {
-        final List<Topic> allTopics = allTopics().stream().map(Topic::new).collect(toList());
+        final List<String> allTopics = allTopics().stream().collect(toList());
         assertThat(kafkaTopicRepository.listTopics(), containsInAnyOrder(allTopics.toArray()));
     }
 
