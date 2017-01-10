@@ -123,7 +123,8 @@ public class EventTypeControllerTest {
         final PartitionsCalculator partitionsCalculator = new KafkaConfig().createPartitionsCalculator(
                 "t2.large", objectMapper, nakadiSettings);
         final EventTypeService eventTypeService = new EventTypeService(eventTypeRepository, topicRepository,
-                partitionResolver, enrichment, subscriptionRepository, schemaEvolutionService, partitionsCalculator);
+                partitionResolver, enrichment, subscriptionRepository, schemaEvolutionService, partitionsCalculator,
+                featureToggleService);
 
         final EventTypeOptionsValidator eventTypeOptionsValidator =
                 new EventTypeOptionsValidator(TOPIC_RETENTION_MIN_MS, TOPIC_RETENTION_MAX_MS);

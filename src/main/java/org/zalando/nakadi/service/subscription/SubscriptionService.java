@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponents;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.zalando.nakadi.domain.TopicPosition;
 import org.zalando.nakadi.view.Cursor;
 import org.zalando.nakadi.domain.EventType;
 import org.zalando.nakadi.domain.ItemsWrapper;
@@ -16,7 +17,6 @@ import org.zalando.nakadi.domain.PaginationWrapper;
 import org.zalando.nakadi.domain.Subscription;
 import org.zalando.nakadi.domain.SubscriptionBase;
 import org.zalando.nakadi.domain.SubscriptionEventTypeStats;
-import org.zalando.nakadi.domain.TopicPartition;
 import org.zalando.nakadi.exceptions.DuplicatedSubscriptionException;
 import org.zalando.nakadi.exceptions.InternalNakadiException;
 import org.zalando.nakadi.exceptions.NakadiException;
@@ -238,13 +238,13 @@ public class SubscriptionService {
                 .map(EventType::getTopic)
                 .collect(Collectors.toSet());
 
-        final List<TopicPartition> topicPartitions = topicRepository.listPartitions(topics);
+        final List<TopicPosition> topicPartitions = topicRepository.loadNewestPosition(topics);
 
         return eventTypes.stream()
                 .map(eventType -> {
                     final Set<SubscriptionEventTypeStats.Partition> statPartitions =
                             topicPartitions.stream()
-                            .filter(partition -> eventType.getTopic().equals(partition.getTopicId()))
+                            .filter(partition -> eventType.getTopic().equals(partition.getTopic()))
                             .map(Try.wrap(partition ->
                                     mergePartitions(zkSubscriptionClient, zkSubscriptionNode, partition)))
                             .map(Try::getOrThrow)
@@ -259,11 +259,11 @@ public class SubscriptionService {
     private SubscriptionEventTypeStats.Partition mergePartitions(
             final ZkSubscriptionClient zkSubscriptionClient,
             final ZkSubscriptionNode zkSubscriptionNode,
-            final TopicPartition topicPartition) throws NakadiException {
+            final TopicPosition topicPartition) throws NakadiException {
         final boolean hasSessions = zkSubscriptionNode.getSessions().length > 0;
 
         final Partition partition = Arrays.stream(zkSubscriptionNode.getPartitions())
-                .filter(p -> p.getKey().getPartition().equals(topicPartition.getPartitionId()))
+                .filter(p -> p.getKey().getPartition().equals(topicPartition.getPartition()))
                 .findFirst()
                 .orElse(null);
 
@@ -272,9 +272,9 @@ public class SubscriptionService {
 
     private SubscriptionEventTypeStats.Partition createPartition(final ZkSubscriptionClient zkSubscriptionClient,
                                                                  @Nullable final Partition partition,
-                                                                 final TopicPartition topicPartition,
+                                                                 final TopicPosition topicPartition,
                                                                  final boolean hasSessions) throws NakadiException {
-        final String partitionId = topicPartition.getPartitionId();
+        final String partitionId = topicPartition.getPartition();
         String partitionState = Partition.State.UNASSIGNED.getDescription();
         String partitionSession = "";
         Long unconsumedEvents = null;
@@ -283,7 +283,7 @@ public class SubscriptionService {
                 partitionState = partition.getState().getDescription();
                 partitionSession = partition.getSession();
             }
-            final String total = topicPartition.getNewestAvailableOffset();
+            final String total = topicPartition.getOffset();
             if (!Cursor.BEFORE_OLDEST_OFFSET.equals(total)) {
                 final long clientOffset = zkSubscriptionClient.getOffset(partition.getKey());
                 unconsumedEvents = Long.valueOf(total) - clientOffset;

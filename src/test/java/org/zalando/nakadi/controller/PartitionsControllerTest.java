@@ -2,28 +2,28 @@ package org.zalando.nakadi.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
+import java.util.List;
+import org.junit.Before;
+import org.junit.Test;
+import org.springframework.http.converter.StringHttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.test.web.servlet.MockMvc;
 import org.zalando.nakadi.config.JsonConfig;
 import org.zalando.nakadi.domain.EventType;
-import org.zalando.nakadi.domain.TopicPartition;
+import org.zalando.nakadi.domain.TopicPosition;
 import org.zalando.nakadi.exceptions.NoSuchEventTypeException;
 import org.zalando.nakadi.exceptions.ServiceUnavailableException;
 import org.zalando.nakadi.repository.EventTypeRepository;
 import org.zalando.nakadi.repository.TopicRepository;
 import org.zalando.nakadi.utils.JsonTestHelper;
 import org.zalando.nakadi.utils.TestUtils;
-import org.junit.Before;
-import org.junit.Test;
-import org.springframework.http.converter.StringHttpMessageConverter;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
-import org.springframework.test.web.servlet.MockMvc;
+import org.zalando.nakadi.view.TopicPartition;
 import org.zalando.problem.Problem;
 import org.zalando.problem.ThrowableProblem;
-
-import java.util.List;
-
 import static javax.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
 import static javax.ws.rs.core.Response.Status.NOT_FOUND;
 import static javax.ws.rs.core.Response.Status.SERVICE_UNAVAILABLE;
+import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -48,6 +48,23 @@ public class PartitionsControllerTest {
             TEST_TOPIC_PARTITION_1);
 
     private static final EventType EVENT_TYPE = TestUtils.buildDefaultEventType();
+
+    private static final TopicPosition TEST_TOPIC_POSITION_0_NEWEST =
+            new TopicPosition(EVENT_TYPE.getTopic(), "0", "67");
+    private static final TopicPosition TEST_TOPIC_POSITION_1_NEWEST =
+            new TopicPosition(EVENT_TYPE.getTopic(), "1", "98");
+    private static final List<TopicPosition> TEST_TOPIC_POSITIONS_NEWEST = ImmutableList.of(
+            TEST_TOPIC_POSITION_0_NEWEST,
+            TEST_TOPIC_POSITION_1_NEWEST);
+
+    private static final TopicPosition TEST_TOPIC_POSITION_0_OLDEST =
+            new TopicPosition(EVENT_TYPE.getTopic(), "0", "12");
+    private static final TopicPosition TEST_TOPIC_POSITION_1_OLDEST =
+            new TopicPosition(EVENT_TYPE.getTopic(), "1", "43");
+    private static final List<TopicPosition> TEST_TOPIC_POSITIONS_OLDEST = ImmutableList.of(
+            TEST_TOPIC_POSITION_0_OLDEST,
+            TEST_TOPIC_POSITION_1_OLDEST);
+
 
     private EventTypeRepository eventTypeRepositoryMock;
 
@@ -77,7 +94,9 @@ public class PartitionsControllerTest {
     public void whenListPartitionsThenOk() throws Exception {
         when(eventTypeRepositoryMock.findByName(TEST_EVENT_TYPE)).thenReturn(EVENT_TYPE);
         when(topicRepositoryMock.topicExists(eq(EVENT_TYPE.getTopic()))).thenReturn(true);
-        when(topicRepositoryMock.listPartitions(eq(EVENT_TYPE.getTopic()))).thenReturn(TEST_TOPIC_PARTITIONS);
+        when(topicRepositoryMock.loadNewestPosition(EVENT_TYPE.getTopic())).thenReturn(TEST_TOPIC_POSITIONS_NEWEST);
+        when(topicRepositoryMock.loadOldestPosition(eq(EVENT_TYPE.getTopic()), anyBoolean())).thenReturn(
+                TEST_TOPIC_POSITIONS_OLDEST);
 
         mockMvc.perform(
                 get(String.format("/event-types/%s/partitions", TEST_EVENT_TYPE)))
@@ -123,9 +142,9 @@ public class PartitionsControllerTest {
     public void whenGetPartitionThenOk() throws Exception {
         when(eventTypeRepositoryMock.findByName(TEST_EVENT_TYPE)).thenReturn(EVENT_TYPE);
         when(topicRepositoryMock.topicExists(eq(EVENT_TYPE.getTopic()))).thenReturn(true);
-        when(topicRepositoryMock.partitionExists(eq(EVENT_TYPE.getTopic()), eq(TEST_PARTITION))).thenReturn(true);
-        when(topicRepositoryMock.getPartition(eq(EVENT_TYPE.getTopic()), eq(TEST_PARTITION)))
-                .thenReturn(TEST_TOPIC_PARTITION_0);
+        when(topicRepositoryMock.loadNewestPosition(eq(EVENT_TYPE.getTopic()))).thenReturn(TEST_TOPIC_POSITIONS_NEWEST);
+        when(topicRepositoryMock.loadOldestPosition(eq(EVENT_TYPE.getTopic()), anyBoolean()))
+                .thenReturn(TEST_TOPIC_POSITIONS_OLDEST);
 
         mockMvc.perform(
                 get(String.format("/event-types/%s/partitions/%s", TEST_EVENT_TYPE, TEST_PARTITION)))
@@ -148,7 +167,9 @@ public class PartitionsControllerTest {
     public void whenGetPartitionForWrongPartitionThenNotFound() throws Exception {
         when(eventTypeRepositoryMock.findByName(TEST_EVENT_TYPE)).thenReturn(EVENT_TYPE);
         when(topicRepositoryMock.topicExists(eq(EVENT_TYPE.getTopic()))).thenReturn(true);
-        when(topicRepositoryMock.partitionExists(eq(EVENT_TYPE.getTopic()), eq(UNKNOWN_PARTITION))).thenReturn(false);
+        when(topicRepositoryMock.loadNewestPosition(eq(EVENT_TYPE.getTopic()))).thenReturn(TEST_TOPIC_POSITIONS_NEWEST);
+        when(topicRepositoryMock.loadOldestPosition(eq(EVENT_TYPE.getTopic()), anyBoolean()))
+                .thenReturn(TEST_TOPIC_POSITIONS_OLDEST);
         final ThrowableProblem expectedProblem = Problem.valueOf(NOT_FOUND, "partition not found");
 
         mockMvc.perform(

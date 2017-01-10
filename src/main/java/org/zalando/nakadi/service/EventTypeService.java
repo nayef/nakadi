@@ -34,6 +34,7 @@ import org.zalando.nakadi.repository.TopicRepository;
 import org.zalando.nakadi.repository.db.SubscriptionDbRepository;
 import org.zalando.nakadi.repository.kafka.PartitionsCalculator;
 import org.zalando.nakadi.security.Client;
+import org.zalando.nakadi.util.FeatureToggleService;
 import org.zalando.nakadi.validation.SchemaEvolutionService;
 import org.zalando.nakadi.validation.SchemaIncompatibility;
 import static org.zalando.nakadi.util.FeatureToggleService.Feature.CHECK_PARTITIONS_KEYS;
@@ -50,6 +51,7 @@ public class EventTypeService {
     private final SubscriptionDbRepository subscriptionRepository;
     private final SchemaEvolutionService schemaEvolutionService;
     private final PartitionsCalculator partitionsCalculator;
+    private final FeatureToggleService featureToggleService;
 
     @Autowired
     public EventTypeService(final EventTypeRepository eventTypeRepository,
@@ -58,7 +60,8 @@ public class EventTypeService {
                             final Enrichment enrichment,
                             final SubscriptionDbRepository subscriptionRepository,
                             final SchemaEvolutionService schemaEvolutionService,
-                            final PartitionsCalculator partitionsCalculator) {
+                            final PartitionsCalculator partitionsCalculator,
+                            final FeatureToggleService featureToggleService) {
         this.eventTypeRepository = eventTypeRepository;
         this.topicRepository = topicRepository;
         this.partitionResolver = partitionResolver;
@@ -66,6 +69,7 @@ public class EventTypeService {
         this.subscriptionRepository = subscriptionRepository;
         this.schemaEvolutionService = schemaEvolutionService;
         this.partitionsCalculator = partitionsCalculator;
+        this.featureToggleService = featureToggleService;
     }
 
     public List<EventType> list() {
